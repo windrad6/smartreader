@@ -25,7 +25,10 @@ do
 	
 	#echo $driveName	
 	vendor=`cut -d" " -f1 <<< "$driveFamily"`
-
+	if [ $vendor = "Seagate" ]; then
+		echo "rerun smartctl"
+		driveData=`smartctl -a -v 7,raw48:54 -v 1,raw48:54 $drive`
+	fi
 	temp=$(handle_Temperature $vendor "$driveData")
 	echo "$driveFamily $driveModel $driveSerial $temp"
 done
