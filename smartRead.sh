@@ -1,11 +1,13 @@
 #!/bin/bash
 
+DEBUG=1
+
 
 handle_Type () {
 	local vendor=$1
 	local attrName=$2
 	local data=$3[@]
-	temp=`grep $attrName <<< "$data" | sed "s/^[ \t]*//" | tr -s ' ' | cut -d" " -f10 | sed "s/^[ \t]*//"`	
+	temp=`grep "$attrName" <<< "$data" | sed "s/^[ \t]*//" | tr -s ' ' | cut -d" " -f10 | sed "s/^[ \t]*//"`	
 	echo $temp
 }
 
@@ -13,10 +15,43 @@ handle_singleCol () {
 	local vendor=$1
 	local attrName=$2
 	local data=$3[@]
-	temp=`grep $attrName <<< "$data" | sed "s/^[ \t]*//" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
+	temp=`grep "$attrName" <<< "$data" | sed "s/^[ \t]*//" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
 	echo $temp
 }
 
+handle_SATA_HDD () {
+	local vendor=$1
+	local driveData=$2[@]
+	
+	temp=$(handle_Type $vendor "Temperature_Celsius" "$driveData")
+	seek_err=$(handle_Type $vendor "Seek_Error_Rate" "$driveData")
+	read_err=$(handle_Type $vendor "Raw_Read_Error_Rate" "$driveData")
+	power_on=$(handle_Type $vendor "Power_On_Hours" "$driveData")
+	status=$(handle_singleCol $vendor "Status:" "$driveData")
+	printf "%10s %10s %20s %20s %10s %10s %10s %10s %10s\n" $path "$vendor" "$driveModel" "$driveSerial" "$temp" "$seek_err" "$read_err" "$power_on" "$status"
+}
+
+handle_SAS_HDD () {
+	local vendor=$1
+	local driveData=$2[@]
+	
+	if [ $DEBUG == 1 ]; then 
+		echo "SAS handle"
+	fi
+	
+	temp=`grep "Drive Temperature:" <<< "$driveData" | tr -s ' ' | cut -d" " -f4 | sed "s/^[ \t]*//"`	
+	
+	readCorrected=`grep "read:" <<< "$driveData" | tr -s ' ' | cut -d" " -f5 | sed "s/^[ \t]*//"`	
+	readunCorrected=`grep "read:" <<< "$driveData" | tr -s ' ' | cut -d" " -f8 | sed "s/^[ \t]*//"`	
+	writeCorrected=`grep "write:" <<< "$driveData" | tr -s ' ' | cut -d" " -f5 | sed "s/^[ \t]*//"`	
+	writeunCorrected=`grep "write:" <<< "$driveData" | tr -s ' ' | cut -d" " -f8 | sed "s/^[ \t]*//"`	
+
+	seek_err=$(handle_Type $vendor "Seek_Error_Rate" "$driveData")
+	read_err=$(($readCorrected + $readunCorrected + $writeCorrected + $writeunCorrected))
+	power_on=$(handle_Type $vendor "Power_On_Hours" "$driveData")
+	status=$(handle_singleCol $vendor "Status:" "$driveData")
+	printf "%10s %10s %20s %20s %10s %10s %10s %10s %10s\n" $path "$vendor" "$driveModel" "$driveSerial" "$temp" "$seek_err" "$read_err" "$power_on" "$status"
+}
 
 
 
@@ -36,7 +71,15 @@ do
 	driveModel=`grep "Device Model:" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
 
 	driveSerial=`grep "Serial Number:" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
+
+	if [ -z $driveSerial ]; then
+		driveSerial=`grep "Serial number:" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
+	fi
 	
+	if [ -z $driveModel ]; then
+		driveModel=`grep "Product:" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
+	fi
+
 	#echo $driveName
 	if [ -n "$driveVendor" ]; then
 		vendor=$driveVendor
@@ -51,21 +94,21 @@ do
 		driveModel=$tmpModel
 	fi
 	
-	if [ $devType != "ATA" ] && [ $devType != "SCSI" ]; then
+	if [[ $devType != *"ATA"* ]] && [[ $devType != *"SCSI"* ]]; then
 		echo "Device type $devType not supported yet"
 		continue
 	fi
 
-	if [ $vendor == "Seagate" ]; then
+	if [[ $vendor == *"Seagate"* ]]; then
 		#echo "rerun smartctl for Seagate drives"
 		driveData=`smartctl -a -v 7,raw48:54 -v 1,raw48:54 $path`
 	fi
 
-	temp=$(handle_Type $vendor "Temperature_Celsius" "$driveData")
-	seek_err=$(handle_Type $vendor "Seek_Error_Rate" "$driveData")
-	read_err=$(handle_Type $vendor "Raw_Read_Error_Rate" "$driveData")
-	power_on=$(handle_Type $vendor "Power_On_Hours" "$driveData")
-	status=$(handle_singleCol $vendor "Status:" "$driveData")
-	printf "%10s %10s %20s %20s %10s %10s %10s %10s %10s\n" $path "$vendor" "$driveModel" "$driveSerial" "$temp" "$seek_err" "$read_err" "$power_on" "$status"
-	#echo -e "$path\t$vendor\t$driveModel\t\t$driveSerial\t$temp\t\t$seek_err\t\t$read_err\t\t$power_on"
+
+	sasFlag=`grep "Transport protocol:" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
+	if [[ $sasFlag == *"SAS"* ]]; then
+		handle_SAS_HDD $vendor "$driveData"
+	else
+		handle_SATA_HDD $vendor "$driveData"
+	fi
 done
