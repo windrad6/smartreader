@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DEBUG=1
+DEBUG=0
 
 
 handle_Type () {
@@ -27,7 +27,7 @@ handle_SATA_HDD () {
 	seek_err=$(handle_Type $vendor "Seek_Error_Rate" "$driveData")
 	read_err=$(handle_Type $vendor "Raw_Read_Error_Rate" "$driveData")
 	power_on=$(handle_Type $vendor "Power_On_Hours" "$driveData")
-	status=$(handle_singleCol $vendor "Status:" "$driveData")
+	status=$(handle_singleCol $vendor "SMART overall-health self-assessment test result:" "$driveData")
 	printf "%10s %10s %20s %20s %10s %10s %10s %10s %10s\n" $path "$vendor" "$driveModel" "$driveSerial" "$temp" "$seek_err" "$read_err" "$power_on" "$status"
 }
 
@@ -72,11 +72,11 @@ do
 
 	driveSerial=`grep "Serial Number:" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
 
-	if [ -z $driveSerial ]; then
+	if [ -z "$driveSerial" ]; then
 		driveSerial=`grep "Serial number:" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
 	fi
 	
-	if [ -z $driveModel ]; then
+	if [ -z "$driveModel" ]; then
 		driveModel=`grep "Product:" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
 	fi
 
@@ -92,11 +92,6 @@ do
 	tmpModel=`cut -d" " -f2 <<< "$driveModel"`
 	if [ -n "$tmpModel" ]; then
 		driveModel=$tmpModel
-	fi
-	
-	if [[ $devType != *"ATA"* ]] && [[ $devType != *"SCSI"* ]]; then
-		echo "Device type $devType not supported yet"
-		continue
 	fi
 
 	if [[ $vendor == *"Seagate"* ]]; then
