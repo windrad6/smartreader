@@ -1,11 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 
 
 handle_Temperature () {
-	vendor=$1
-	data=$2
-	echo "temp handle$vendor"
-	temperature=`grep "Temperature" <<< "$data" | cut -d" " -f10 | sed "s/^[ \t]*//"`	
+	local vendor=$1
+	local data=$@
+	temp=`grep "Temperature_Celsius" <<< "$data" | tr -s ' ' | cut -d" " -f10 | sed "s/^[ \t]*//"`	
+	echo $temp
 }
 
 
@@ -19,11 +19,13 @@ DRIVES=(`smartctl --scan | cut -d" " -f1`)
 for drive in "${DRIVES[@]}" 
 do
 	driveData=`smartctl -a $drive`
+	driveFamily=`grep "Model Family" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
+	driveModel=`grep "Device Model" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
+	driveSerial=`grep "Serial Number" <<< "$driveData" | tr -s ' ' | cut -d":" -f2 | sed "s/^[ \t]*//"`	
 	
-	driveName=`grep "Model" <<< "$driveData" | cut -d":" -f2 | sed "s/^[ \t]*//"`	
-	
-	echo $driveName	
-	vendor=`cut -d" " -f1 <<< "$driveName"`
+	#echo $driveName	
+	vendor=`cut -d" " -f1 <<< "$driveFamily"`
 
-	handle_Temperature $vendor $driveData
+	temp=$(handle_Temperature $vendor "$driveData")
+	echo "$driveFamily $driveModel $driveSerial $temp"
 done
