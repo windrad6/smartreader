@@ -64,7 +64,7 @@ handle_SAS_HDD () {
 
 echo "readSmartData"
 
-readarray -t DRIVES <<<`smartctl --scan`
+mapfile -t DRIVES < <(smartctl --scan)
 
 printf "%10s %10s %20s %20s %10s %10s %10s %10s %10s\n" "Path" "Vendor" "Model" "Serial" "Temp" "Seek_err" "Read_err" "Power_on" "Status"
 for drive in "${DRIVES[@]}" 
